@@ -38,8 +38,12 @@ RUN diffpose-download
 
 WORKDIR /workspace
 
-# /videos   → mount your input videos here
-# /results  → outputs (.npz, .mp4) written here
-RUN mkdir -p /videos /results
+# /videos          → mount input videos here
+# /results         → .npz outputs from diffpose-infer
+# /visualisations  → .mp4 outputs from diffpose-visualise
+RUN mkdir -p /videos /results /visualisations
+
+# diffpose-explore dashboard
+EXPOSE 8050
 
 CMD ["bash"]

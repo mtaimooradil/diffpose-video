@@ -9,6 +9,14 @@ data/
 checkpoints/
 results/
 exp/
+videos/
+visualisations/
+
+# User TOML configs (may contain real paths) — keep bundled examples in configs/
+configs/*.toml
+!configs/infer.toml
+!configs/explore.toml
+!configs/visualise.toml
 
 # Python
 __pycache__/

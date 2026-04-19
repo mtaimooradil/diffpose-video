@@ -1,39 +1,45 @@
 """
 Offline inference pipeline for DiffPose-Video.
 
-Given a video file (or a folder of videos), this script:
+Given one or more video files or directories, this script:
   1. Detects 2D keypoints per frame with RTMPose (via rtmlib).
   2. Remaps COCO 17 joints → H36M 17 joints.
   3. Normalises to screen coordinates.
   4. Runs MixSTE + DiffPose to lift 2D → 3D.
-  5. Saves the 3D keypoints as <output_dir>/<video_stem>.npz.
+  5. Saves the 3D keypoints as <output_dir>/.../<video_stem>.npz,
+     preserving subdirectory structure for recursive inputs.
 
 Usage
 -----
 Single video:
-    python infer.py --input video.mp4 \\
-                    --model_pose checkpoints/mixste_cpn_243f.bin \\
-                    --model_diff checkpoints/diffpose_video_uvxyz_cpn.pth \\
-                    --config configs/human36m_diffpose_uvxyz_cpn.yml
+    diffpose-infer --input video.mp4
 
-Folder of videos:
-    python infer.py --input /path/to/videos/ \\
-                    --model_pose checkpoints/mixste_cpn_243f.bin \\
-                    --model_diff checkpoints/diffpose_video_uvxyz_cpn.pth \\
-                    --config configs/human36m_diffpose_uvxyz_cpn.yml \\
-                    --output_dir results/
+Multiple inputs (files and/or directories):
+    diffpose-infer --input clip1.mp4 clip2.mp4 /path/to/folder/
+
+Recursive directory (preserves subdir structure in output):
+    diffpose-infer --input /datasets/videos/ --recursive --output_dir results/
+
+Skip already-processed files:
+    diffpose-infer --input /datasets/videos/ --recursive --skip_existing
 """
 
 import argparse
+import fnmatch
 import os
 import sys
+import time
 import types
+
+# Force onnxruntime to use CUDA provider before any rtmlib/onnxruntime import
+os.environ.setdefault('ONNXRUNTIME_EXECUTION_PROVIDERS', 'CUDAExecutionProvider,CPUExecutionProvider')
 
 import cv2
 import numpy as np
 import torch
 import yaml
 from rtmlib import Body, PoseTracker
+from tqdm import tqdm
 
 from diffpose_video.common.infer_utils import (
     JOINTS_LEFT,
@@ -63,31 +69,60 @@ def _default_checkpoint(name: str) -> str:
 
 def parse_args():
     parser = argparse.ArgumentParser(description='DiffPose-Video inference on arbitrary videos')
-    parser.add_argument('--input',      required=True,
-                        help='Path to a video file or a folder containing video files.')
-    parser.add_argument('--output_dir', default='results',
-                        help='Directory where output .npz files are saved. (default: results/)')
     parser.add_argument('--config',     default=None,
-                        help='Path to the YAML config file. '
+                        help='Path to a TOML config file (all other args become optional).')
+    parser.add_argument('--input',      nargs='+', default=None,
+                        help='One or more video files and/or directories to process.')
+    parser.add_argument('--output_dir', default=None,
+                        help='Root directory where output .npz files are saved. (default: results/)')
+    parser.add_argument('--recursive',  action='store_const', const=True, default=None,
+                        help='Recurse into subdirectories when --input is a directory.')
+    parser.add_argument('--skip_existing', action='store_const', const=True, default=None,
+                        help='Skip videos whose .npz output already exists.')
+    parser.add_argument('--exclude', nargs='+', default=None, metavar='PATTERN',
+                        help='Exclude files matching these patterns (substring or glob).')
+    parser.add_argument('--model_config', default=None,
+                        help='Path to the model YAML config file. '
                              '(default: bundled human36m_diffpose_uvxyz_cpn.yml)')
     parser.add_argument('--model_pose', default=None,
-                        help='Path to the MixSTE checkpoint (.bin). '
-                             '(default: ~/.cache/diffpose_video/checkpoints/mixste_cpn_243f.bin)')
+                        help='Path to the MixSTE checkpoint (.bin).')
     parser.add_argument('--model_diff', default=None,
-                        help='Path to the GCNdiff checkpoint (.pth). '
-                             '(default: ~/.cache/diffpose_video/checkpoints/diffpose_video_uvxyz_cpn.pth)')
-    parser.add_argument('--det_freq',   type=int, default=1,
-                        help='Run person detection every N frames to speed up inference. (default: 1 = every frame)')
-    parser.add_argument('--device',     default='cuda',
+                        help='Path to the GCNdiff checkpoint (.pth).')
+    parser.add_argument('--det_freq',   type=int, default=None,
+                        help='Run person detection every N frames. (default: 1)')
+    parser.add_argument('--device',     default=None,
                         help='Torch device: cuda or cpu. (default: cuda)')
     args = parser.parse_args()
-    if args.config is None:
-        args.config = _default_config()
+    _apply_config(args)
+    return args
+
+
+def _apply_config(args) -> None:
+    from diffpose_video.common.config_loader import load_toml, merge
+
+    cfg = load_toml(args.config) if args.config else {}
+
+    merge(args, cfg, defaults={
+        'input':        None,
+        'output_dir':   'results',
+        'recursive':    False,
+        'skip_existing': False,
+        'exclude':      [],
+        'model_config': None,
+        'model_pose':   None,
+        'model_diff':   None,
+        'det_freq':     1,
+        'device':       'cuda',
+    })
+
+    if not args.input:
+        raise SystemExit('Provide --input or set input in your config file.')
+    if args.model_config is None:
+        args.model_config = _default_config()
     if args.model_pose is None:
         args.model_pose = _default_checkpoint('mixste_cpn_243f.bin')
     if args.model_diff is None:
         args.model_diff = _default_checkpoint('diffpose_video_uvxyz_cpn.pth')
-    return args
 
 
 # ---------------------------------------------------------------------------
@@ -111,21 +146,100 @@ def load_config(path: str):
 # Video utilities
 # ---------------------------------------------------------------------------
 
-VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.m4v'}
+VIDEO_EXTENSIONS = {
+    '.mp4', '.m4v', '.mov', '.qt',           # MPEG-4 / QuickTime
+    '.avi',                                   # AVI
+    '.mkv', '.webm',                          # Matroska / WebM
+    '.wmv', '.asf',                           # Windows Media
+    '.flv', '.f4v',                           # Flash
+    '.mpeg', '.mpg', '.m2v', '.ts', '.mts', '.m2ts',  # MPEG-2
+    '.3gp', '.3g2',                           # Mobile
+    '.ogv', '.ogg',                           # Ogg
+    '.vob', '.divx', '.rmvb', '.rm',          # Other
+    '.dav', '.mxf',                           # Surveillance / broadcast
+    '.hevc',                                  # Raw HEVC/H.265
+    '.movi',                                  # MOVI container
+}
 
 
-def collect_videos(input_path: str) -> list[str]:
-    """Return a sorted list of video file paths from a file or folder."""
-    if os.path.isfile(input_path):
-        return [input_path]
-    videos = [
-        os.path.join(input_path, f)
-        for f in sorted(os.listdir(input_path))
-        if os.path.splitext(f)[1].lower() in VIDEO_EXTENSIONS
-    ]
-    if not videos:
-        sys.exit(f'No video files found in {input_path}')
-    return videos
+def _is_video(filename: str) -> bool:
+    return os.path.splitext(filename)[1].lower() in VIDEO_EXTENSIONS
+
+
+def _is_excluded(filename: str, patterns: list[str]) -> bool:
+    """
+    Return True if filename matches any exclusion pattern.
+    Patterns are matched case-insensitively against the bare filename.
+    A pattern without wildcards is treated as a substring match.
+    A pattern with '*' or '?' is treated as a glob match.
+    """
+    name = filename.lower()
+    for pat in patterns:
+        pat_lower = pat.lower()
+        if '*' in pat_lower or '?' in pat_lower:
+            if fnmatch.fnmatch(name, pat_lower):
+                return True
+        else:
+            if pat_lower in name:
+                return True
+    return False
+
+
+def collect_videos(
+    inputs: list[str],
+    recursive: bool = False,
+    exclude: list[str] | None = None,
+) -> list[tuple[str, str]]:
+    """
+    Collect video files from a mixed list of files and directories.
+
+    Returns a list of (video_path, relative_subdir) tuples.
+    - video_path:      absolute path to the video file.
+    - relative_subdir: path relative to the input root, used to mirror
+                       the source layout under output_dir. Empty string for
+                       flat inputs (single files or top-level folder scan).
+    """
+    exclude = exclude or []
+    results: list[tuple[str, str]] = []
+
+    for inp in inputs:
+        inp = os.path.abspath(inp)
+        if os.path.isfile(inp):
+            fname = os.path.basename(inp)
+            if not _is_video(fname):
+                print(f'[warn] Skipping non-video file: {inp}')
+            elif _is_excluded(fname, exclude):
+                print(f'[skip] Excluded by pattern: {inp}')
+            else:
+                results.append((inp, ''))
+        elif os.path.isdir(inp):
+            if recursive:
+                for dirpath, dirnames, filenames in os.walk(inp):
+                    dirnames.sort()
+                    rel = os.path.relpath(dirpath, inp)
+                    rel = '' if rel == '.' else rel
+                    for fname in sorted(filenames):
+                        if not _is_video(fname):
+                            continue
+                        if _is_excluded(fname, exclude):
+                            print(f'[skip] Excluded by pattern: {os.path.join(dirpath, fname)}')
+                            continue
+                        results.append((os.path.join(dirpath, fname), rel))
+            else:
+                for fname in sorted(os.listdir(inp)):
+                    fpath = os.path.join(inp, fname)
+                    if not os.path.isfile(fpath) or not _is_video(fname):
+                        continue
+                    if _is_excluded(fname, exclude):
+                        print(f'[skip] Excluded by pattern: {fpath}')
+                        continue
+                    results.append((fpath, ''))
+        else:
+            print(f'[warn] Input not found, skipping: {inp}')
+
+    if not results:
+        sys.exit('No video files found in the specified input(s).')
+    return results
 
 
 def extract_frames(video_path: str) -> tuple[list[np.ndarray], int, int]:
@@ -321,7 +435,7 @@ def lift_to_3d(
 
 def process_video(
     video_path: str,
-    output_dir: str,
+    out_path: str,
     tracker: PoseTracker,
     model_pose,
     model_diff,
@@ -332,7 +446,6 @@ def process_video(
 ):
     """Run the full pipeline on a single video and save the result."""
     stem = os.path.splitext(os.path.basename(video_path))[0]
-    out_path = os.path.join(output_dir, f'{stem}.npz')
 
     print(f'\n[{stem}] Loading frames ...')
     frames, width, height = extract_frames(video_path)
@@ -375,10 +488,8 @@ def main():
     args   = parse_args()
     _check_checkpoint(args.model_pose, 'MixSTE')
     _check_checkpoint(args.model_diff, 'GCNdiff')
-    config = load_config(args.config)
+    config = load_config(args.model_config)
     device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
-
-    os.makedirs(args.output_dir, exist_ok=True)
 
     print('Loading models ...')
     model_pose, model_diff, betas = load_models(
@@ -389,17 +500,46 @@ def main():
     det_device = 'cuda' if device.type == 'cuda' else 'cpu'
     tracker = build_detector(det_device, det_freq=args.det_freq)
 
-    videos = collect_videos(args.input)
-    print(f'Found {len(videos)} video(s) to process.')
+    videos = collect_videos(args.input, recursive=args.recursive, exclude=args.exclude)
+    total = len(videos)
+    print(f'Found {total} video(s) to process.')
 
-    for video_path in videos:
+    skipped = 0
+    done = 0
+    bar = tqdm(
+        videos,
+        total=total,
+        unit='video',
+        bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]',
+        dynamic_ncols=True,
+    )
+
+    for video_path, subdir in bar:
+        stem = os.path.splitext(os.path.basename(video_path))[0]
+        out_subdir = os.path.join(args.output_dir, subdir)
+        os.makedirs(out_subdir, exist_ok=True)
+        out_path = os.path.join(out_subdir, f'{stem}.npz')
+
+        bar.set_postfix_str(f'current={stem}  done={done}  skipped={skipped}  left={total - done - skipped - 1}')
+
+        if args.skip_existing and os.path.exists(out_path):
+            tqdm.write(f'[skip] {stem} — already exists')
+            skipped += 1
+            continue
+
+        t0 = time.perf_counter()
         process_video(
-            video_path, args.output_dir,
+            video_path, out_path,
             tracker, model_pose, model_diff, betas,
             config, device, args.det_freq,
         )
+        elapsed = time.perf_counter() - t0
+        done += 1
+        tqdm.write(f'[done] {stem}  ({elapsed:.1f}s)  → {out_path}')
+        bar.set_postfix_str(f'current={stem}  done={done}  skipped={skipped}  left={total - done - skipped}')
 
-    print('\nDone.')
+    bar.close()
+    print(f'\nFinished — {done} processed, {skipped} skipped, {total - done - skipped} failed.')
 
 
 if __name__ == '__main__':

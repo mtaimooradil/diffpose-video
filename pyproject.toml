@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "diffpose-video"
-version = "0.2.1"
+version = "0.3.0"
 description = "3D human pose estimation from video using DiffPose + MixSTE"
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 keywords = ["pose estimation", "3d pose", "diffusion", "human motion"]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -50,3 +50,12 @@ include = ["diffpose_video*"]
 
 [tool.setuptools.package-data]
 "diffpose_video" = ["py.typed", "configs/*.yml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts  = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["diffpose_video"]
+omit   = ["diffpose_video/runners/*", "diffpose_video/common/h36m*",
+          "diffpose_video/common/humaneva*", "diffpose_video/common/generators*"]

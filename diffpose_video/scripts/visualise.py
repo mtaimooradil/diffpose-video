@@ -21,6 +21,7 @@ Optional flags:
 
 import argparse
 import os
+from pathlib import Path
 
 import cv2
 import matplotlib
@@ -195,6 +196,8 @@ def visualise(
     start: int,
     end: int | None,
     azim: float,
+    tqdm_position: int = 0,
+    tqdm_leave: bool = True,
 ) -> None:
     # Load 3D predictions and 2D detections
     data       = np.load(npz_path)
@@ -238,63 +241,207 @@ def visualise(
     fig.patch.set_facecolor('#1a1a2e')
     ax3d = fig.add_subplot(111, projection='3d')
 
-    print(f'Rendering {n_frames} frames → {output_path}')
+    import time
+    bar = tqdm(
+        range(n_frames),
+        desc=os.path.basename(output_path),
+        unit='fr',
+        position=tqdm_position,
+        leave=tqdm_leave,
+        dynamic_ncols=True,
+    )
+    t0 = time.perf_counter()
 
-    for i in tqdm(range(n_frames)):
+    for i in bar:
         frame_idx = start + i
         ok, frame = cap.read()
         if not ok:
             break
 
-        # --- Left panel: video + 2D skeleton ---
         frame_2d = draw_2d_skeleton(frame, kps_2d[frame_idx])
         left = cv2.resize(frame_2d, (panel_w, panel_h))
 
-        # --- Right panel: 3D skeleton ---
         render_3d_frame(ax3d, poses_3d[frame_idx], azim)
         right = cv2.resize(fig_to_array(fig), (panel_w, panel_h))
 
-        # Concatenate and write
         combined = np.concatenate([left, right], axis=1)
         writer.write(combined)
+
+        if i % 10 == 0 and i > 0:
+            elapsed = time.perf_counter() - t0
+            bar.set_postfix_str(f'{i/elapsed:.1f} fr/s', refresh=False)
 
     cap.release()
     writer.release()
     plt.close(fig)
-    print(f'Saved → {output_path}')
+    bar.close()
+    tqdm.write(f'Saved → {output_path}')
 
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
+VIDEO_EXTENSIONS = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v']
+
+
+def find_video(stem: str, videos_dir: str) -> str | None:
+    """Search videos_dir recursively for a video matching stem; prefer non-sync files."""
+    root = Path(videos_dir)
+    candidates = []
+    for ext in VIDEO_EXTENSIONS:
+        candidates.extend(root.rglob(f'{stem}{ext}'))
+    non_sync = [p for p in candidates if '_sync' not in p.stem]
+    result = non_sync or candidates
+    return str(result[0]) if result else None
+
+
+def batch_visualise(
+    results_dir: str,
+    videos_dir: str,
+    output_dir: str,
+    fps: float | None,
+    start: int,
+    end: int | None,
+    azim: float,
+    skip_existing: bool = False,
+) -> None:
+    import time as _time
+    results_path = Path(results_dir)
+    npz_files = sorted(results_path.rglob('*.npz'))
+    if not npz_files:
+        raise SystemExit(f'No .npz files found in {results_dir}')
+
+    total   = len(npz_files)
+    done    = 0
+    skipped = 0
+    tqdm.write(f'Found {total} result file(s). Output → {output_dir}')
+
+    outer = tqdm(
+        npz_files,
+        total=total,
+        unit='vid',
+        position=0,
+        leave=True,
+        dynamic_ncols=True,
+        bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]',
+    )
+
+    for npz_path in outer:
+        stem = npz_path.stem
+        outer.set_postfix_str(f'{stem}  done={done}  skip={skipped}', refresh=True)
+
+        video_path = find_video(stem, videos_dir)
+        if not video_path:
+            tqdm.write(f'[skip] No video found for {stem}')
+            skipped += 1
+            continue
+
+        rel = npz_path.parent.relative_to(results_path)
+        out_subdir = Path(output_dir) / rel
+        out_subdir.mkdir(parents=True, exist_ok=True)
+        out_path = out_subdir / f'{stem}_vis.mp4'
+
+        if skip_existing and out_path.exists():
+            tqdm.write(f'[skip] {stem} — already exists')
+            skipped += 1
+            continue
+
+        t0 = _time.perf_counter()
+        visualise(str(npz_path), video_path, str(out_path),
+                  fps, start, end, azim,
+                  tqdm_position=1, tqdm_leave=False)
+        elapsed = _time.perf_counter() - t0
+        done += 1
+        tqdm.write(f'[done] {stem}  ({elapsed:.1f}s)')
+
+    outer.close()
+    tqdm.write(f'\nFinished — {done} rendered, {skipped} skipped, {total - done - skipped} failed.')
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Visualise DiffPose-Video 3D keypoints')
-    parser.add_argument('--npz',    required=True, help='Path to .npz output from infer.py')
-    parser.add_argument('--video',  required=True, help='Path to the original source video')
-    parser.add_argument('--output', required=True, help='Path to save the output .mp4')
+    parser.add_argument('--config', default=None,
+                        help='Path to a TOML config file (all other args become optional).')
+    # Single-video mode
+    parser.add_argument('--npz',    default=None, help='Path to .npz output from infer.py')
+    parser.add_argument('--video',  default=None, help='Path to the original source video')
+    parser.add_argument('--output', default=None, help='Path to save the output .mp4')
+    # Batch mode
+    parser.add_argument('--results_dir', default=None,
+                        help='Directory of .npz files to render (recursive scan)')
+    parser.add_argument('--videos_dir',  default=None,
+                        help='Directory containing original videos (matched by stem)')
+    parser.add_argument('--output_dir',  default=None,
+                        help='Root output directory for batch mode (default: visualisations/)')
+    parser.add_argument('--skip_existing', action='store_const', const=True, default=None,
+                        help='Skip videos whose output already exists')
+    # Shared
     parser.add_argument('--fps',    type=float, default=None,
                         help='Output FPS (default: match source video)')
-    parser.add_argument('--start',  type=int,   default=0,
+    parser.add_argument('--start',  type=int,   default=None,
                         help='First frame to render (default: 0)')
     parser.add_argument('--end',    type=int,   default=None,
                         help='Last frame to render, exclusive (default: all)')
-    parser.add_argument('--azim',   type=float, default=70,
+    parser.add_argument('--azim',   type=float, default=None,
                         help='Initial 3D camera azimuth in degrees (default: 70)')
-    return parser.parse_args()
+    args = parser.parse_args()
+    _apply_config(args)
+    return args
+
+
+def _apply_config(args) -> None:
+    from diffpose_video.common.config_loader import load_toml, merge
+
+    cfg = load_toml(args.config) if args.config else {}
+
+    merge(args, cfg, defaults={
+        'npz':           None,
+        'video':         None,
+        'output':        None,
+        'results_dir':   None,
+        'videos_dir':    None,
+        'output_dir':    'visualisations',
+        'skip_existing': False,
+        'fps':           None,
+        'start':         0,
+        'end':           None,
+        'azim':          70,
+    })
 
 
 def main():
     args = parse_args()
-    visualise(
-        npz_path=args.npz,
-        video_path=args.video,
-        output_path=args.output,
-        fps=args.fps,
-        start=args.start,
-        end=args.end,
-        azim=args.azim,
-    )
+
+    if args.results_dir:
+        if not args.videos_dir:
+            raise SystemExit('--videos_dir is required for batch mode.')
+        batch_visualise(
+            results_dir=args.results_dir,
+            videos_dir=args.videos_dir,
+            output_dir=args.output_dir,
+            fps=args.fps,
+            start=args.start,
+            end=args.end,
+            azim=args.azim,
+            skip_existing=args.skip_existing,
+        )
+    elif args.npz and args.video and args.output:
+        visualise(
+            npz_path=args.npz,
+            video_path=args.video,
+            output_path=args.output,
+            fps=args.fps,
+            start=args.start,
+            end=args.end,
+            azim=args.azim,
+        )
+    else:
+        raise SystemExit(
+            'Provide either:\n'
+            '  --npz FILE --video FILE --output FILE  (single video)\n'
+            '  --results_dir DIR --videos_dir DIR     (batch)'
+        )
 
 
 if __name__ == '__main__':

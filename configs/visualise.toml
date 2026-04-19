@@ -1,0 +1,13 @@
+# DiffPose-Video visualise config
+# Run: diffpose-visualise --config visualise.toml
+
+results_dir   = "results"
+videos_dir    = "/path/to/videos"
+output_dir    = "visualisations"
+skip_existing = true
+azim          = 70
+
+# Optional frame range
+# start = 0
+# end   = 500
+# fps   = 30.0

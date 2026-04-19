@@ -1,0 +1,15 @@
+# DiffPose-Video inference config
+# Run: diffpose-infer --config infer.toml
+
+input       = ["/path/to/videos/"]
+output_dir  = "results"
+recursive   = true
+skip_existing = true
+exclude     = ["*_sync*"]
+device      = "cuda"
+det_freq    = 1
+
+# Optional: override bundled model paths
+# model_config = "/path/to/human36m_diffpose_uvxyz_cpn.yml"
+# model_pose   = "/path/to/mixste_cpn_243f.bin"
+# model_diff   = "/path/to/diffpose_video_uvxyz_cpn.pth"

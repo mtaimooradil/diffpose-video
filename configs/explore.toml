@@ -1,0 +1,14 @@
+# DiffPose-Video explore dashboard config
+# Run: diffpose-explore --config explore.toml
+
+results_dir = "results"
+output_dir  = "visualisations"
+fps         = 30.0
+port        = 8050
+
+# [videos] section maps result key prefixes to video directories.
+# "default" is used when no prefix matches.
+[videos]
+default = "/path/to/videos"
+# Cam1 = "/path/to/Cam1/InputMedia"
+# Cam2 = "/path/to/Cam2/InputMedia"
