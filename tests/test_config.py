@@ -113,47 +113,6 @@ class TestInferApplyConfig:
 
 
 # ---------------------------------------------------------------------------
-# visualise._apply_config
-# ---------------------------------------------------------------------------
-
-class TestVisualiseApplyConfig:
-    def _args(self, **kwargs):
-        defaults = dict(
-            config=None, npz=None, video=None, output=None,
-            results_dir=None, videos_dir=None, output_dir=None,
-            skip_existing=None, fps=None, start=None, end=None, azim=None,
-        )
-        defaults.update(kwargs)
-        return argparse.Namespace(**defaults)
-
-    def test_defaults_applied(self):
-        args = self._args()
-        from diffpose_video.scripts.visualise import _apply_config
-        _apply_config(args)
-        assert args.output_dir == 'visualisations'
-        assert args.start == 0
-        assert args.azim == 70
-        assert args.skip_existing is False
-
-    def test_toml_values_applied(self, tmp_path):
-        toml = tmp_path / 'vis.toml'
-        toml.write_text('results_dir = "results"\nvideos_dir = "/vids"\nazim = 45\n')
-        args = self._args(config=str(toml))
-        from diffpose_video.scripts.visualise import _apply_config
-        _apply_config(args)
-        assert args.results_dir == 'results'
-        assert args.azim == 45
-
-    def test_cli_overrides_toml(self, tmp_path):
-        toml = tmp_path / 'vis.toml'
-        toml.write_text('azim = 45\n')
-        args = self._args(config=str(toml), azim=90.0)
-        from diffpose_video.scripts.visualise import _apply_config
-        _apply_config(args)
-        assert args.azim == 90.0
-
-
-# ---------------------------------------------------------------------------
 # explore._apply_config
 # ---------------------------------------------------------------------------
 

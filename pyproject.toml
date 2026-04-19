@@ -22,12 +22,9 @@ dependencies = [
     "timm>=0.9.0",
     "tqdm",
     "pyyaml",
-    "matplotlib",
     "opencv-python-headless",
     "rtmlib",
     "onnxruntime-gpu==1.20.1",
-    "dash",
-    "plotly",
     "requests",
 ]
 
@@ -39,10 +36,8 @@ torch-cuda = [
 ]
 
 [project.scripts]
-diffpose-infer     = "diffpose_video.scripts.infer:main"
-diffpose-explore   = "diffpose_video.scripts.explore:main"
-diffpose-visualise = "diffpose_video.scripts.visualise:main"
-diffpose-download  = "diffpose_video.download_checkpoints:main"
+diffpose-infer    = "diffpose_video.scripts.infer:main"
+diffpose-download = "diffpose_video.download_checkpoints:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -57,5 +52,4 @@ addopts  = "-v --tb=short"
 
 [tool.coverage.run]
 source = ["diffpose_video"]
-omit   = ["diffpose_video/runners/*", "diffpose_video/common/h36m*",
-          "diffpose_video/common/humaneva*", "diffpose_video/common/generators*"]
+omit   = ["diffpose_video/runners/*"]
