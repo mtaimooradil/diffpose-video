@@ -29,7 +29,7 @@ RUN python -m pip install --no-cache-dir \
     --index-url https://download.pytorch.org/whl/cu128
 
 # Install diffpose-video from PyPI (brings all remaining dependencies)
-RUN python -m pip install --no-cache-dir \
+RUN python -m pip install --no-cache-dir --break-system-packages \
     "onnxruntime-gpu==1.20.1" \
     diffpose-video
 
