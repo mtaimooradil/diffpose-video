@@ -25,10 +25,10 @@ pip install diffpose-video
 ## Download pretrained checkpoints
 
 ```bash
-python download_checkpoints.py
+diffpose-download
 ```
 
-Downloads `mixste_cpn_243f.bin` and `diffpose_video_uvxyz_cpn.pth` to `~/.cache/diffpose_video/checkpoints/`.
+Downloads all pretrained weights to `~/.cache/diffpose_video/checkpoints/`. Safe to re-run — skips files that already exist.
 
 ---
 

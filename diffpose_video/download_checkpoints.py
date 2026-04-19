@@ -69,7 +69,7 @@ def default_checkpoint_dir() -> Path:
     return DEFAULT_DIR
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Download DiffPose-Video checkpoints")
     parser.add_argument(
         "--dest",
@@ -78,3 +78,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     download_checkpoints(Path(args.dest))
+
+
+if __name__ == "__main__":
+    main()

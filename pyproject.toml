@@ -39,9 +39,10 @@ torch-cuda = [
 ]
 
 [project.scripts]
-diffpose-infer     = "diffpose_video.scripts.infer:main"
-diffpose-explore   = "diffpose_video.scripts.explore:main"
-diffpose-visualise = "diffpose_video.scripts.visualise:main"
+diffpose-infer      = "diffpose_video.scripts.infer:main"
+diffpose-explore    = "diffpose_video.scripts.explore:main"
+diffpose-visualise  = "diffpose_video.scripts.visualise:main"
+diffpose-download   = "diffpose_video.download_checkpoints:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

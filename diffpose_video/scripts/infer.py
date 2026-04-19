@@ -342,7 +342,7 @@ def process_video(
 
 def _check_checkpoint(path: str, name: str) -> None:
     if not os.path.isfile(path):
-        from download_checkpoints import DEFAULT_DIR
+        from diffpose_video.download_checkpoints import DEFAULT_DIR
         sys.exit(
             f'\nCheckpoint not found: {path}\n'
             f'Run the following to download pretrained weights:\n'
