@@ -2,6 +2,8 @@ FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # System dependencies + Python 3.13 via deadsnakes PPA
 RUN apt-get update && apt-get install -y \
@@ -23,13 +25,17 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.13
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.13 1 \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13 1
 
+# Install packages in an isolated virtual environment
+RUN python -m venv "$VIRTUAL_ENV" \
+    && python -m pip install --no-cache-dir --upgrade pip setuptools wheel
+
 # PyTorch with CUDA 12.8 support (installed separately to cache this heavy layer)
 RUN python -m pip install --no-cache-dir \
     torch torchvision torchaudio \
     --index-url https://download.pytorch.org/whl/cu128
 
 # Install diffpose-video from PyPI (brings all remaining dependencies)
-RUN python -m pip install --no-cache-dir --break-system-packages \
+RUN python -m pip install --no-cache-dir \
     "onnxruntime-gpu==1.20.1" \
     diffpose-video
 
