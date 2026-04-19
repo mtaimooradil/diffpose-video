@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "diffpose-video"
-version = "0.2.0"
+version = "0.2.1"
 description = "3D human pose estimation from video using DiffPose + MixSTE"
 readme = "README.md"
 license = { text = "MIT" }
@@ -39,10 +39,10 @@ torch-cuda = [
 ]
 
 [project.scripts]
-diffpose-infer      = "diffpose_video.scripts.infer:main"
-diffpose-explore    = "diffpose_video.scripts.explore:main"
-diffpose-visualise  = "diffpose_video.scripts.visualise:main"
-diffpose-download   = "diffpose_video.download_checkpoints:main"
+diffpose-infer     = "diffpose_video.scripts.infer:main"
+diffpose-explore   = "diffpose_video.scripts.explore:main"
+diffpose-visualise = "diffpose_video.scripts.visualise:main"
+diffpose-download  = "diffpose_video.download_checkpoints:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
