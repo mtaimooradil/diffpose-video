@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "diffpose-video"
+version = "0.1.0"
+description = "3D human pose estimation from video using DiffPose + MixSTE"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+keywords = ["pose estimation", "3d pose", "diffusion", "human motion"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "einops",
+    "timm>=0.9.0",
+    "tqdm",
+    "pyyaml",
+    "matplotlib",
+    "opencv-python-headless",
+    "rtmlib",
+    "onnxruntime-gpu==1.20.1",
+    "dash",
+    "plotly",
+    "requests",
+]
+
+[project.optional-dependencies]
+torch-cuda = [
+    "torch>=2.0",
+    "torchvision",
+    "torchaudio",
+]
+
+[project.scripts]
+diffpose-infer     = "diffpose_video.scripts.infer:main"
+diffpose-explore   = "diffpose_video.scripts.explore:main"
+diffpose-visualise = "diffpose_video.scripts.visualise:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["diffpose_video*"]
+
+[tool.setuptools.package-data]
+"diffpose_video" = ["py.typed"]

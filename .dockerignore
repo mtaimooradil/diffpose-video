@@ -1,0 +1,9 @@
+data/
+checkpoints/
+exp/
+.git/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.env
