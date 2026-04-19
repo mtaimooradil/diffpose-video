@@ -51,23 +51,43 @@ from diffpose_video.common.utils_diff import generalized_steps
 # Argument parsing
 # ---------------------------------------------------------------------------
 
+def _default_config() -> str:
+    from diffpose_video import configs_dir
+    return str(configs_dir() / 'human36m_diffpose_uvxyz_cpn.yml')
+
+
+def _default_checkpoint(name: str) -> str:
+    from diffpose_video.download_checkpoints import DEFAULT_DIR
+    return str(DEFAULT_DIR / name)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description='DiffPose-Video inference on arbitrary videos')
     parser.add_argument('--input',      required=True,
                         help='Path to a video file or a folder containing video files.')
     parser.add_argument('--output_dir', default='results',
                         help='Directory where output .npz files are saved. (default: results/)')
-    parser.add_argument('--config',     required=True,
-                        help='Path to the YAML config file (e.g. configs/human36m_diffpose_uvxyz_cpn.yml).')
-    parser.add_argument('--model_pose', required=True,
-                        help='Path to the MixSTE checkpoint (.bin).')
-    parser.add_argument('--model_diff', required=True,
-                        help='Path to the GCNdiff checkpoint (.pth).')
+    parser.add_argument('--config',     default=None,
+                        help='Path to the YAML config file. '
+                             '(default: bundled human36m_diffpose_uvxyz_cpn.yml)')
+    parser.add_argument('--model_pose', default=None,
+                        help='Path to the MixSTE checkpoint (.bin). '
+                             '(default: ~/.cache/diffpose_video/checkpoints/mixste_cpn_243f.bin)')
+    parser.add_argument('--model_diff', default=None,
+                        help='Path to the GCNdiff checkpoint (.pth). '
+                             '(default: ~/.cache/diffpose_video/checkpoints/diffpose_video_uvxyz_cpn.pth)')
     parser.add_argument('--det_freq',   type=int, default=1,
                         help='Run person detection every N frames to speed up inference. (default: 1 = every frame)')
     parser.add_argument('--device',     default='cuda',
                         help='Torch device: cuda or cpu. (default: cuda)')
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.config is None:
+        args.config = _default_config()
+    if args.model_pose is None:
+        args.model_pose = _default_checkpoint('mixste_cpn_243f.bin')
+    if args.model_diff is None:
+        args.model_diff = _default_checkpoint('diffpose_video_uvxyz_cpn.pth')
+    return args
 
 
 # ---------------------------------------------------------------------------

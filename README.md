@@ -37,13 +37,10 @@ Downloads all pretrained weights to `~/.cache/diffpose_video/checkpoints/`. Safe
 ### 1. Run inference on a video
 
 ```bash
-diffpose-infer \
-  --input        video.mp4 \
-  --config       configs/human36m_diffpose_uvxyz_cpn.yml \
-  --model_pose   ~/.cache/diffpose_video/checkpoints/mixste_cpn_243f.bin \
-  --model_diff   ~/.cache/diffpose_video/checkpoints/diffpose_video_uvxyz_cpn.pth \
-  --output_dir   results/
+diffpose-infer --input video.mp4 --output_dir results/
 ```
+
+Config and checkpoint paths default to the bundled config and `~/.cache/diffpose_video/checkpoints/` (populated by `diffpose-download`). Override with `--config`, `--model_pose`, `--model_diff` if needed.
 
 Output: `results/<video_name>.npz` containing:
 - `poses_3d` — `(T, 17, 3)` root-relative 3D joint positions
@@ -81,18 +78,23 @@ Produces a video with the original footage (+ 2D overlay) on the left and the an
 
 ## Docker
 
-```bash
-docker build -t diffpose-video .
+The image is self-contained — checkpoints and config are baked in at build time.
 
-docker run --gpus all \
-  -v $(pwd)/checkpoints:/workspace/checkpoints \
-  -v $(pwd)/results:/workspace/results \
-  -v /path/to/videos:/videos \
-  diffpose-video \
-  diffpose-infer --input /videos/clip.mp4 \
-    --config configs/human36m_diffpose_uvxyz_cpn.yml \
-    --model_pose checkpoints/mixste_cpn_243f.bin \
-    --model_diff checkpoints/diffpose_video_uvxyz_cpn.pth
+```bash
+# Build once
+docker compose build
+
+# Inference (outputs land in ./results/)
+export VIDEOS_DIR=/path/to/your/videos
+docker compose run infer --input /videos/clip.mp4
+
+# Render side-by-side MP4
+docker compose run visualise \
+  --npz /results/clip.npz --video /videos/clip.mp4 --output /results/clip_vis.mp4
+
+# Interactive dashboard — open http://localhost:8050
+docker compose run --service-ports explore \
+  --npz /results/clip.npz --video /videos/clip.mp4
 ```
 
 ---

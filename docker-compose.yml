@@ -1,0 +1,47 @@
+# DiffPose-Video — Docker Compose
+#
+# Prerequisites:
+#   docker compose build        (first time only)
+#
+# Usage:
+#   docker compose run infer --input /videos/clip.mp4
+#   docker compose run visualise --npz /results/clip.npz --video /videos/clip.mp4 --output /results/clip_vis.mp4
+#   docker compose run --service-ports explore --npz /results/clip.npz --video /videos/clip.mp4
+#
+# Set VIDEOS_DIR and RESULTS_DIR to your local paths, or export them in your shell:
+#   export VIDEOS_DIR=/path/to/your/videos
+#   export RESULTS_DIR=/path/to/your/results
+
+x-base: &base
+  image: diffpose-video:latest
+  build: .
+  runtime: nvidia
+  environment:
+    - NVIDIA_VISIBLE_DEVICES=all
+    - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+  volumes:
+    - ${VIDEOS_DIR:-./videos}:/videos
+    - ${RESULTS_DIR:-./results}:/results
+
+services:
+
+  # 3D pose inference — checkpoints and config are bundled in the image
+  # All args after the service name are passed to diffpose-infer
+  # Example: docker compose run infer --input /videos/clip.mp4
+  infer:
+    <<: *base
+    entrypoint: ["diffpose-infer", "--output_dir", "/results"]
+
+  # Render a side-by-side MP4
+  # Example: docker compose run visualise --npz /results/clip.npz --video /videos/clip.mp4 --output /results/clip_vis.mp4
+  visualise:
+    <<: *base
+    entrypoint: ["diffpose-visualise"]
+
+  # Interactive Dash dashboard — open http://localhost:8050 in your browser
+  # Example: docker compose run --service-ports explore --npz /results/clip.npz --video /videos/clip.mp4
+  explore:
+    <<: *base
+    entrypoint: ["diffpose-explore", "--port", "8050"]
+    ports:
+      - "8050:8050"

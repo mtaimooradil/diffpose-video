@@ -7,9 +7,6 @@ ENV PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install -y \
     software-properties-common \
     curl \
-    wget \
-    unzip \
-    git \
     libgl1 \
     libglib2.0-0 \
     && add-apt-repository ppa:deadsnakes/ppa \
@@ -26,29 +23,23 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.13
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.13 1 \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13 1
 
-# Install latest PyTorch with CUDA 12.8 support
+# PyTorch with CUDA 12.8 support (installed separately to cache this heavy layer)
 RUN python -m pip install --no-cache-dir \
     torch torchvision torchaudio \
     --index-url https://download.pytorch.org/whl/cu128
 
-# Install all project dependencies
+# Install diffpose-video from PyPI (brings all remaining dependencies)
 RUN python -m pip install --no-cache-dir \
-    numpy \
-    scipy \
-    einops \
-    "timm>=0.9.0" \
-    tqdm \
-    pyyaml \
-    matplotlib \
-    tensorboard \
-    opencv-python-headless \
-    rtmlib \
     "onnxruntime-gpu==1.20.1" \
-    dash \
-    plotly
+    diffpose-video
+
+# Download pretrained checkpoints into the image cache directory
+RUN diffpose-download
 
 WORKDIR /workspace
 
-RUN mkdir -p data checkpoints exp
+# /videos   → mount your input videos here
+# /results  → outputs (.npz, .mp4) written here
+RUN mkdir -p /videos /results
 
 CMD ["bash"]
