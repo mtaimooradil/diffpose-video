@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  install-and-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyTorch (CPU-only for CI)
+        run: |
+          pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install package deps (swap onnxruntime-gpu → cpu for CI)
+        run: |
+          pip install --no-deps -e .
+          pip install numpy scipy einops "timm>=0.9.0" tqdm pyyaml matplotlib \
+                      opencv-python-headless rtmlib onnxruntime dash plotly requests
+
+      - name: Check all entry points load and respond to --help
+        run: |
+          diffpose-infer --help
+          diffpose-explore --help
+          diffpose-visualise --help
+          diffpose-download --help
+
+      - name: Build and validate distribution
+        run: |
+          pip install build twine
+          python -m build
+          python -m twine check dist/*
