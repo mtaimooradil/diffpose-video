@@ -19,11 +19,15 @@ CHECKPOINTS_URL = (
     "https://www.dropbox.com/sh/jhwz3ypyxtyrlzv/AABivC5oiiMdgPePxekzu6vga?dl=1"
 )
 
-EXPECTED_FILES = [
-    "mixste_cpn_243f.bin",
-    "diffpose_video_uvxyz_cpn.pth",
-    "diffpose_video_uvxyz_gt.pth",
-]
+# Maps the filename inside the zip → the name to save it as locally.
+# Some entries in the zip use slightly different names than the config expects.
+ZIP_TO_LOCAL = {
+    "mixste_cpn_243f.bin":       "mixste_cpn_243f.bin",
+    "diffpose_video_uvxyz_cpn.pth": "diffpose_video_uvxyz_cpn.pth",
+    "diffpose_uvxyz_gt.pth":     "diffpose_video_uvxyz_gt.pth",
+}
+
+EXPECTED_FILES = list(ZIP_TO_LOCAL.values())
 
 DEFAULT_DIR = Path.home() / ".cache" / "diffpose_video" / "checkpoints"
 
@@ -55,11 +59,13 @@ def download_checkpoints(dest: Path) -> None:
     print("Extracting ...")
     with zipfile.ZipFile(zip_path, "r") as zf:
         for member in zf.namelist():
-            fname = Path(member).name
-            if fname in EXPECTED_FILES:
-                data = zf.read(member)
-                (dest / fname).write_bytes(data)
-                print(f"  extracted → {dest / fname}")
+            zip_name = Path(member).name
+            if zip_name in ZIP_TO_LOCAL:
+                local_name = ZIP_TO_LOCAL[zip_name]
+                if not (dest / local_name).exists():
+                    data = zf.read(member)
+                    (dest / local_name).write_bytes(data)
+                    print(f"  extracted → {dest / local_name}")
 
     zip_path.unlink()
     print("\nAll checkpoints ready.")

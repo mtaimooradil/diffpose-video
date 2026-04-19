@@ -1,5 +1,10 @@
 # DiffPose-Video
 
+[![PyPI version](https://img.shields.io/pypi/v/diffpose-video)](https://pypi.org/project/diffpose-video/)
+[![Python](https://img.shields.io/pypi/pyversions/diffpose-video)](https://pypi.org/project/diffpose-video/)
+[![CI](https://github.com/mtaimooradil/diffpose-video/actions/workflows/ci.yml/badge.svg)](https://github.com/mtaimooradil/diffpose-video/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 3D human pose estimation from arbitrary video using **MixSTE** (2D→3D lifting) and **DiffPose** (diffusion-based refinement).
 
 This package wraps the original [DiffPose](https://github.com/GONGJIA0208/Diffpose) research code with a clean inference pipeline, an interactive visualisation dashboard, and a video renderer — all accessible as CLI commands after a single `pip install`.
